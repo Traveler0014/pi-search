@@ -1,0 +1,37 @@
+{
+  "name": "pi-search",
+  "version": "0.1.0",
+  "description": "Web search and page extraction for the pi coding agent, powered by Tavily",
+  "keywords": [
+    "pi-package",
+    "pi-tool",
+    "search",
+    "web-search",
+    "tavily"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "repository": "git@github.com:Traveler0014/pi-search.git",
+  "installUrl": "https://github.com/Traveler0014/pi-search.git",
+  "scripts": {
+    "update-docs": "tsx scripts/update-docs.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "pi": {
+    "extensions": [
+      "tools/pi-search"
+    ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.22.4",
+    "typebox": "*",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
