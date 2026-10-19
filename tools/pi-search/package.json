@@ -1,12 +1,14 @@
 {
   "name": "pi-search",
-  "version": "0.1.0",
-  "description": "Web search and page extraction for pi, powered by Tavily",
+  "version": "0.4.0",
+  "description": "Web search and page extraction for pi, with pluggable search backends (Tavily, DeepSeek)",
   "keywords": [
     "pi-package",
     "pi-tool",
     "search",
-    "tavily"
+    "providers",
+    "tavily",
+    "deepseek"
   ],
   "license": "MIT",
   "pi": {

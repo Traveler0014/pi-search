@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "url": "https://techcrunch.com/2025/12/18/luma-releases-a-new-ai-model-that-lets-users-generate-a-video-from-a-start-and-end-frame",
+      "title": "Luma releases a new AI model that lets users generate a video from a start and end frame | TechCrunch",
+      "text": "Luma, the a16z-backed AI video and 3D model company, released a new model called Ray3 Modify that allows users to modify existing footage by providing character reference images that preserve the performance of the original footage. Users can also provide a start and an end frame to guide the model to generate transitional footage.\n\nThe company said Thursday the Ray3 Modify model solves the problems of preserving human performance while editing or generating effects using AI for creative studios. The startup said the model follows the input footage better, allowing studios to use human actors for creative or brand footage. Luma mentioned the new model retains the actor’s original motion, timing, eye line, and emotional delivery while transforming the scene.\n\nWith Ray3 Modify, users can provide a character reference for transformation to the original footage and convert the human actor’s appearance into that character. This reference also allows creators to retain information like costumes, likeness, and identity across the shoot.\n\nWhat’s more, users can also provide start and end reference frames to create a video using the new Ray3 Modify model. This is helpful for creators in directing transitions or controlling character movements or behavior while maintaining continuity between scenes.\n\n“Generative video models are incredibly expressive but also hard to control. Today, we are excited to introduce Ray3 Modify that blends the real-world with the expressivity of AI while giving full control to creatives. This means creative teams can capture performances with a camera and then immediately modify them to be in any location imaginable, change costumes, or even go back and reshoot the scene with AI, without recreating the physical shoot,” Amit Jain, co-founder and CEO of Luma AI, said in a statement.\n\nLuma said the new model is available to users through the company’s Dream Machine platform. The company, which competes with the likes of Runway and Kling, released video modification capabilities in June 2025.\n\nThe model release comes on the back of a fresh $900 million funding round, led by Saudi Arabia’s Public Investment Fund-owned AI company Humain, for the startup announced in November. Existing investors like a16z, Amplify Partners, and Matrix Partners also participated in the round. The startup is also planning to build a 2GW AI cluster in Saudi Arabia along with Humain.",
+      "images": []
+    }
+  ],
+  "failedResults": [
+    {
+      "url": "https://techcrunch.com/definitely-missing-page-xyz",
+      "error": "404 page not found"
+    }
+  ],
+  "responseTime": 1.21
+}

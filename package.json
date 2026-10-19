@@ -1,13 +1,15 @@
 {
   "name": "pi-search",
-  "version": "0.1.0",
-  "description": "Web search and page extraction for the pi coding agent, powered by Tavily",
+  "version": "0.4.0",
+  "description": "Web search and page extraction for the pi coding agent, with pluggable search backends (Tavily, DeepSeek)",
   "keywords": [
     "pi-package",
     "pi-tool",
     "search",
+    "providers",
     "web-search",
-    "tavily"
+    "tavily",
+    "deepseek"
   ],
   "author": "",
   "license": "MIT",
