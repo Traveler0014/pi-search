@@ -1,6 +1,6 @@
 {
   "name": "pi-search",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Web search and page extraction for the pi coding agent, with pluggable search backends (Tavily, DeepSeek)",
   "keywords": [
     "pi-package",
