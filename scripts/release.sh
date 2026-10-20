@@ -112,8 +112,10 @@ npm run --silent update-docs
 
 # ── Commit ───────────────────────────────────────────────────────────────────
 
-# Use directory name as extension name in tag (last component of path)
-EXT_NAME="$(basename "$EXT_PATH")"
+# Tag by extension path, matching the tags already in the repo
+# (`tools/pi-search@0.5.0`). `basename` produced `pi-search@...`, which made
+# two naming schemes coexist and broke `git tag -l 'tools/*'` style lookups.
+EXT_NAME="${EXT_PATH%/}"
 TAG="${EXT_NAME}@${NEW_VERSION}"
 
 echo ""
