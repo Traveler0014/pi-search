@@ -251,7 +251,7 @@ describe("TAVILY_HTTP_PROFILE", () => {
   });
 
   it("names the fix for auth failures", () => {
-    expect(TAVILY_HTTP_PROFILE.describe(401, null)).toContain("/search-key");
+    expect(TAVILY_HTTP_PROFILE.describe(401, null)).toContain("/search-config");
     expect(TAVILY_HTTP_PROFILE.describe(401, null)).toContain("TAVILY_API_KEY");
   });
 });

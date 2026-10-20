@@ -18,8 +18,11 @@ import { PROVIDERS } from "../providers/registry.js";
 import {
   buildSettingsMenu,
   describeKey,
+  envOverrideNote,
+  keyFormatError,
   runMenu,
   settingsSummary,
+  type KeyTarget,
   type Menu,
   type MenuIO,
   type SettingsDeps,
@@ -376,6 +379,45 @@ describe("navigation", () => {
       "✕ Close",
     ]);
     expect(ran).toEqual(["second"]);
+  });
+});
+
+const keyTarget: KeyTarget = {
+  id: "tavily",
+  label: "Tavily",
+  apiKeyEnv: ["TAVILY_API_KEY"],
+  looksLikeKey: (key) => key.startsWith("tvly-"),
+};
+
+describe("keyFormatError", () => {
+  it("rejects an empty value", () => {
+    expect(keyFormatError(keyTarget, "   ")).toBe("No key entered.");
+  });
+
+  it("rejects a key of the wrong shape, naming the backend", () => {
+    expect(keyFormatError(keyTarget, "sk-nope")).toBe(
+      "Invalid key format: expected a Tavily API key.",
+    );
+  });
+
+  it("accepts a plausible key", () => {
+    expect(keyFormatError(keyTarget, "tvly-abcdefghijklmnop")).toBeNull();
+  });
+});
+
+describe("envOverrideNote", () => {
+  it("is empty when no env var is set", () => {
+    expect(envOverrideNote(keyTarget, {})).toBe("");
+  });
+
+  it("names the env var that shadows the stored key", () => {
+    expect(envOverrideNote(keyTarget, { TAVILY_API_KEY: "tvly-env" })).toBe(
+      " Note: TAVILY_API_KEY is set and takes precedence over the stored key.",
+    );
+  });
+
+  it("ignores blank env vars", () => {
+    expect(envOverrideNote(keyTarget, { TAVILY_API_KEY: "   " })).toBe("");
   });
 });
 

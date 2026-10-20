@@ -10,10 +10,10 @@ Give the agent live access to the web: it can search for current information and
 - **`search_extract`** — full readable page text from up to 20 URLs per call, including failed-URL reporting
 - **Capability-shaped schema** — the model-facing parameters describe *searching*, not any one backend; backend-native knobs travel in `provider_options`
 - **Pluggable backends** — Tavily and DeepSeek today; every backend is an adapter behind one registry, and the tool schemas do not change when one is added
-- **Per-provider keys and default** — `/search-config` opens a settings menu; `/search-key <provider> <key>` and `/search-provider <id>` remain for scripts; `<PROVIDER>_API_KEY` always wins over the stored key
+- **Per-provider keys and default** — one settings menu (`/search-config`) manages both; `<PROVIDER>_API_KEY` always wins over the stored key
 - **Compact plain-text output** tuned for model consumption, with automatic truncation
 - **Judgement aids per result** — a normalized `score` with a `high`/`medium`/`low` level, the publication date, and provider flags, compressed onto one line so the model can weigh results instead of trusting rank alone
-- **Key management** — `/search-key` stores the key in `~/.pi/agent/pi-search.json` with `0600` permissions; `TAVILY_API_KEY` overrides it
+- **Key management** — `/search-config` stores keys in `~/.pi/agent/pi-search.json` with `0600` permissions and shows them masked with their source; `TAVILY_API_KEY` overrides the stored key
 - **Runtime self-check** — `/search-test` validates config; `/search-test live` performs one real request
 - **Robust failures** — typed errors for auth, rate limits, timeouts, network failures, and cancellation
 - **No background resources** — the extension opens no sockets or timers until a tool actually runs
@@ -99,21 +99,6 @@ Rows are redrawn with live state after every action; `← Back` returns to the r
 
 Runs a quick 5-result basic search and shows titles and URLs in a notification. This is a raw lookup — ask the agent to "search for ..." when you want a synthesized answer.
 
-### `/search-key [provider] [key|clear]`
-
-Scriptable key management (the menu's non-interactive equivalent):
-
-- `/search-key` — show every backend with its key status and source, then (interactively) pick one to set
-- `/search-key deepseek sk-...` — validate and save that backend's key
-- `/search-key tvly-...` — single argument that matches the default backend's key shape: saved for the default
-- `/search-key deepseek clear` — remove one backend's stored key
-
-Keys are written to `~/.pi/agent/pi-search.json` with owner-only permissions.
-
-### `/search-provider [id]`
-
-Shows all backends with their key status and marks the default (`→`). `/search-provider deepseek` switches the default; an unconfigured backend produces a warning.
-
 ### `/search-test [live]`
 
 Reports, per backend: key source, key-shape sanity, limits, and the accepted `provider_options`. Add `live` to run one real 1-result request per configured backend:
@@ -140,13 +125,7 @@ The environment always takes precedence over the stored key.
 /search-config
 ```
 
-or the scriptable equivalents:
-
-```
-/search-key tavily tvly-...
-/search-key deepseek sk-...
-/search-provider deepseek
-```
+Keys are written to `~/.pi/agent/pi-search.json` with owner-only permissions. Without a dialog UI (RPC/CI) use the environment variables above or edit the file — `/search-config` only prints the current state there.
 
 Get a Tavily key at [tavily.com](https://tavily.com) (free tier available); a DeepSeek key is the one from [platform.deepseek.com](https://platform.deepseek.com/).
 
@@ -251,7 +230,7 @@ Nothing else changes. The tool schemas are untouched: `provider` is an enum deri
 - **Two tools, one job each** — search and extraction are separate operations with separate schemas, following pi's single-responsibility tool convention.
 - **Capabilities, not providers, define the schema** — `query`/`max_results`/`recency`/`domains`/`detail`/`language` are things every backend can do; a backend's own knobs go into `provider_options`, which is never described in the tool schema. This is why adding a provider costs one enum value instead of a few hundred tokens.
 - **Thin adapters, shared core** — adapters own endpoints, bodies, parsing, `provider_options` whitelists, and error prose; validation, transport, config, scoring, and rendering live once in `core/` and are covered by unit tests. `index.ts` is only registration and TUI glue.
-- **Errors that teach** — invalid input throws with the expected shape; auth failures name `/search-key` and the env var as the fix; rate limits tell the caller not to retry immediately; a bad `provider_options` key lists every accepted key. Empty result sets return recovery hints (broaden the query, widen recency, drop domain filters).
+- **Errors that teach** — invalid input throws with the expected shape; auth failures name `/search-config` and the env var as the fix; rate limits tell the caller not to retry immediately; a bad `provider_options` key lists every accepted key. Empty result sets return recovery hints (broaden the query, widen recency, drop domain filters).
 - **Bounded output** — search output truncates to 12K chars, extraction to 16K chars with 4K per page, and `detail: content` caps each result at 2K so a default 5-result search fits the budget without losing the last result. DeepSeek `content` really is 15–20K per page, so the cap is doing real work. The limits live in the shared renderer, not in an adapter.
 - **Scores are normalized, not re-invented** — each adapter maps its native score onto `0..1`; the registry turns that into `high`/`medium`/`low` with the provider's own cutoffs, so the level is comparable across backends while the number stays a per-result-set signal. Provider-native values stay in `details`. A composite pi-search score was deliberately rejected: it would need freshness/authority from every backend and would quietly redefine what "good" means. The level measures **topical relevance**, not usefulness: a homepage titled "AI News" scores high — the date and the result text are what distinguish an article from a listing.
 - **Thresholds are calibrated on real payloads, not guessed** — Tavily publishes none, so the cutoffs (0.75 / 0.50) come from three live queries whose scores span 0.41–0.92; the captured payloads live in `providers/fixtures/` and are asserted in `fixtures.test.ts`.
@@ -260,7 +239,7 @@ Nothing else changes. The tool schemas are untouched: `provider` is an enum deri
 - **Freshness is opt-in at the request level** — Tavily is asked for `include_published_date` so each result can carry a date; results without one render without a date rather than with a fake one.
 - **Backend quirks stay in the backend** — DeepSeek's `site:`/`lang:`/`after:` operators, its 128-character query budget, its one-URL-per-fetch rule, and its `authority` field are all handled inside `providers/deepseek.ts`; callers and the renderer never see them. `authority ≥ 3` surfaces as the `authoritative` flag instead of an extra field Tavily could not fill.
 - **Cancellation and timeouts** — every request carries a 30-second timeout and forwards pi's abort signal to `fetch`.
-- **Zero-cost startup** — no timers, watchers, or network clients are created in the extension factory; config writes go through pi's file mutation queue so `/search-key` cannot race another writer.
+- **Zero-cost startup** — no timers, watchers, or network clients are created in the extension factory; config writes go through pi's file mutation queue so the settings menu cannot race another writer.
 
 ## Notes on usage and privacy
 

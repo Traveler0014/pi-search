@@ -67,14 +67,13 @@ function toolResult(content: string, details: Record<string, unknown> = {}) {
 }
 
 describe("registration", () => {
-  it("registers the settings menu alongside the scriptable commands", () => {
+  it("registers the tools and the three user-facing commands", () => {
     expect([...commands.keys()].sort()).toEqual([
       "search",
       "search-config",
-      "search-key",
-      "search-provider",
       "search-test",
     ]);
+    expect([...tools.keys()].sort()).toEqual(["search_extract", "search_web"]);
   });
 
   it("prints the configuration summary when no dialog UI is available", async () => {
@@ -112,7 +111,7 @@ describe("search_web renderers", () => {
   it("shows the error message instead of 'No results' on failure", () => {
     const rendered = line(
       tool.renderResult(
-        toolResult("Tavily API key not configured. Run /search-key tavily <key>."),
+        toolResult("Tavily API key not configured. Open /search-config."),
         renderOptions,
         theme,
         errorContext,

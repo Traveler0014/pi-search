@@ -99,7 +99,7 @@ export const DEEPSEEK_EXTRACT_OPTIONS: NativeOptionsSpec = {};
 
 const STATUS_PROSE: Record<number, string> = {
   400: "DeepSeek rejected the request body (HTTP 400). Check the query and filters.",
-  401: "DeepSeek rejected the API key (HTTP 401). Check DEEPSEEK_API_KEY or run /search-key deepseek <key>.",
+  401: "DeepSeek rejected the API key (HTTP 401). Check DEEPSEEK_API_KEY or update the stored key in /search-config.",
   402: "DeepSeek account balance is insufficient (HTTP 402). Top up, then retry.",
   403: "DeepSeek blocked the fetch by security policy (HTTP 403).",
   404: "DeepSeek found no extractable page content (HTTP 404).",

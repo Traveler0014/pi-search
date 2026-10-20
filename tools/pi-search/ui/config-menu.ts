@@ -16,7 +16,6 @@ import {
   resolveApiKey,
   type SearchConfig,
 } from "../core/config.js";
-import { envOverrideNote, keyFormatError } from "../core/settings.js";
 import { getProvider, selectProvider } from "../providers/registry.js";
 import type { SearchProvider } from "../providers/types.js";
 
@@ -115,6 +114,44 @@ function optionLabels(entries: MenuEntry[]): string[] {
  */
 function stripState(label: string): string {
   return label.split(" — ")[0].trim();
+}
+
+// =============================================================================
+// Key copy
+// =============================================================================
+
+/** The slice of a provider that key validation and messaging need. */
+export interface KeyTarget {
+  id: string;
+  label: string;
+  apiKeyEnv: readonly string[];
+  looksLikeKey: (key: string) => boolean;
+}
+
+/** Why a typed key is rejected, or `null` when it is usable. */
+export function keyFormatError(
+  target: KeyTarget,
+  value: string,
+): string | null {
+  if (!value.trim()) return "No key entered.";
+  if (!target.looksLikeKey(value.trim())) {
+    return `Invalid key format: expected a ${target.label} API key.`;
+  }
+  return null;
+}
+
+/**
+ * Sentence to append when an env var shadows the stored key — the stored key is
+ * kept, but the environment wins, so "saved" alone would be a lie.
+ */
+export function envOverrideNote(
+  target: KeyTarget,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const name = target.apiKeyEnv.find((candidate) => env[candidate]?.trim());
+  return name
+    ? ` Note: ${name} is set and takes precedence over the stored key.`
+    : "";
 }
 
 // =============================================================================

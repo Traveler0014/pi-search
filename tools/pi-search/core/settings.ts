@@ -3,13 +3,7 @@
  *
  * Every write to pi-search.json goes through `mutateConfig`, so the
  * read-modify-write is serialized per file: a key typed into the settings menu
- * cannot clobber a `/search-provider` change made at the same time (or by
- * another session).
- *
- * The two user-facing helpers at the bottom live here rather than in the TUI
- * because they answer a config question — "is this key usable, and is it the one
- * that will actually be used?" — and `/search-key` and the menu must not drift
- * apart on the answer.
+ * cannot clobber a change made at the same time by another session.
  */
 
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
@@ -55,42 +49,4 @@ export async function saveDefaultProvider(
   file: string = CONFIG_FILE,
 ): Promise<void> {
   await mutateConfig((config) => withDefaultProvider(config, providerId), file);
-}
-
-// =============================================================================
-// Key copy shared by /search-key and the settings menu
-// =============================================================================
-
-/** The slice of a provider that key validation and messaging need. */
-export interface KeyTarget {
-  id: string;
-  label: string;
-  apiKeyEnv: readonly string[];
-  looksLikeKey: (key: string) => boolean;
-}
-
-/** Why a typed key is rejected, or `null` when it is usable. */
-export function keyFormatError(
-  target: KeyTarget,
-  value: string,
-): string | null {
-  if (!value.trim()) return "No key entered.";
-  if (!target.looksLikeKey(value.trim())) {
-    return `Invalid key format: expected a ${target.label} API key.`;
-  }
-  return null;
-}
-
-/**
- * Sentence to append when an env var shadows the stored key — the stored key is
- * kept, but the environment wins, so "saved" alone would be a lie.
- */
-export function envOverrideNote(
-  target: KeyTarget,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const name = target.apiKeyEnv.find((candidate) => env[candidate]?.trim());
-  return name
-    ? ` Note: ${name} is set and takes precedence over the stored key.`
-    : "";
 }

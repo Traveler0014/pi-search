@@ -115,7 +115,7 @@ export const TAVILY_HTTP_PROFILE: HttpProfile = {
     if (status === 401 || status === 403) {
       return (
         `Tavily rejected the API key (HTTP ${status}).${suffix} ` +
-        "Check TAVILY_API_KEY or run /search-key <key> to update the stored key."
+        "Check TAVILY_API_KEY or update the stored key in /search-config."
       );
     }
     if (status === 429) {

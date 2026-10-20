@@ -108,8 +108,8 @@ export function selectProvider(
     const note =
       wanted && wanted !== configured.id
         ? preferred
-          ? `default provider ${preferred.label} has no API key; using ${configured.label} — run /search-provider ${configured.id} to make it the default`
-          : `default provider "${wanted}" is not a known backend; using ${configured.label} — run /search-provider ${configured.id} to make it the default`
+          ? `default provider ${preferred.label} has no API key; using ${configured.label} — open /search-config to change the default`
+          : `default provider "${wanted}" is not a known backend; using ${configured.label} — open /search-config to change the default`
         : undefined;
     return { provider: configured, explicit: false, ...(note ? { note } : {}) };
   }

@@ -35,7 +35,7 @@ describe("selectProvider", () => {
     expect(selection.provider.id).toBe("deepseek");
     expect(selection.explicit).toBe(false);
     expect(selection.note).toContain("Tavily has no API key");
-    expect(selection.note).toContain("/search-provider deepseek");
+    expect(selection.note).toContain("/search-config");
   });
 
   it("skips the first registered backend when only a later one has a key", () => {

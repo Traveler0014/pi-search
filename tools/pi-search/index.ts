@@ -7,9 +7,7 @@
  *
  * Commands (user-facing, kebab-case):
  *   - /search <query>            Quick raw search, results in a notification
- *   - /search-config             Interactive settings menu (keys, default backend)
- *   - /search-key [id] [key]     Set / show / clear a provider's API key
- *   - /search-provider [id]      Show or set the default backend
+ *   - /search-config             Settings menu: provider keys, default backend
  *   - /search-test [live]        Self-check per backend (live = one real call)
  *
  * The tool schema is defined by capabilities, not providers: `provider` is an
@@ -45,8 +43,6 @@ import {
 import { formatExtractResponse, formatSearchResponse } from "./core/format.js";
 import { describeNativeOptions } from "./core/provider-options.js";
 import {
-  envOverrideNote,
-  keyFormatError,
   removeProviderKey,
   saveDefaultProvider,
   saveProviderKey,
@@ -64,7 +60,6 @@ import {
 import {
   PROVIDER_IDS,
   PROVIDERS,
-  getProvider,
   runExtract,
   runSearch,
   selectProvider,
@@ -132,7 +127,7 @@ function requireApiKey(provider: SearchProvider, config: SearchConfig): string {
   const resolved = keyFor(provider, config);
   if (!resolved) {
     throw new Error(
-      `${provider.label} API key not configured. Run /search-key ${provider.id} <key> or set ${provider.apiKeyEnv[0]}.`,
+      `${provider.label} API key not configured. Open /search-config, or set ${provider.apiKeyEnv[0]}.`,
     );
   }
   return resolved.apiKey;
@@ -457,7 +452,7 @@ export default function (pi: ExtensionAPI) {
       const resolved = keyFor(provider, config);
       if (!resolved) {
         ctx.ui.notify(
-          `No ${provider.label} API key configured. Run /search-key ${provider.id} <key> or set ${provider.apiKeyEnv[0]}.`,
+          `No ${provider.label} API key configured. Open /search-config, or set ${provider.apiKeyEnv[0]}.`,
           "error",
         );
         return;
@@ -490,10 +485,11 @@ export default function (pi: ExtensionAPI) {
 
   // ── Command: /search-config ─────────────────────────────────────────────
   //
-  // The interactive front door for every setting. `/search-key` and
-  // `/search-provider` stay as scriptable one-liners; the menu is the place a
-  // human manages state, and it grows by adding an entry in
-  // `ui/config-menu.ts` rather than by adding another command.
+  // The one place settings are managed. It replaced `/search-key` and
+  // `/search-provider`: two commands with overlapping argument grammars for the
+  // same two values, one of which (`/search-key <key>` guessing the backend from
+  // the key shape) nobody could remember. It grows by adding an entry in
+  // `ui/config-menu.ts`, not by adding another command.
   pi.registerCommand("search-config", {
     description: "Open the settings menu (provider keys, default backend)",
     async handler(_args, ctx) {
@@ -526,176 +522,6 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // ── Command: /search-key ────────────────────────────────────────────────
-  pi.registerCommand("search-key", {
-    description: "Set, show, or clear a provider's search API key",
-    async handler(args, ctx) {
-      const config = loadConfig();
-      const parts = args.trim().split(/\s+/).filter(Boolean);
-
-      const statusLine = (provider: SearchProvider): string => {
-        const resolved = keyFor(provider, config);
-        const isDefault = provider.id === defaultProviderId(config);
-        const mark = isDefault ? "→" : " ";
-        const suffix = isDefault ? " (default)" : "";
-        if (!resolved) return `${mark} ${provider.id}${suffix}: not configured`;
-        return `${mark} ${provider.id}${suffix}: ${maskApiKey(resolved.apiKey)} via ${keySourceLabel(provider, resolved)}`;
-      };
-
-      const promptForKey = async (provider: SearchProvider): Promise<void> => {
-        if (!ctx.hasUI) {
-          ctx.ui.notify(
-            `Run /search-key ${provider.id} <key>, or set ${provider.apiKeyEnv[0]}.`,
-            "info",
-          );
-          return;
-        }
-        const key = await ctx.ui.input(
-          `${provider.label} API key`,
-          provider.apiKeyEnv[0],
-        );
-        if (key === undefined) {
-          ctx.ui.notify("Cancelled.", "info");
-          return;
-        }
-        await saveKey(provider, key.trim(), ctx);
-      };
-
-      const saveKey = async (
-        provider: SearchProvider,
-        value: string,
-        ui: typeof ctx,
-      ): Promise<void> => {
-        const error = keyFormatError(provider, value);
-        if (error) {
-          ui.ui.notify(error, "error");
-          return;
-        }
-        await saveProviderKey(provider.id, value.trim());
-        ui.ui.notify(
-          `Saved ${provider.label} API key to ${CONFIG_FILE}.${envOverrideNote(provider)}`,
-          "info",
-        );
-      };
-
-      const clearKey = async (provider: SearchProvider): Promise<void> => {
-        await removeProviderKey(provider.id);
-        ctx.ui.notify(
-          `Removed the stored ${provider.label} API key (${CONFIG_FILE}).`,
-          "info",
-        );
-      };
-
-      // /search-key … no arguments: status, then an interactive wizard
-      if (parts.length === 0) {
-        const lines = [PROVIDERS.map(statusLine).join("\n")];
-        lines.push(
-          "Usage: /search-key <provider> <key|clear> — or /search-key <key> for the default provider.\n" +
-            "Tip: /search-config opens the interactive settings menu.",
-        );
-        ctx.ui.notify(lines.join("\n\n"), "info");
-
-        if (!ctx.hasUI) return;
-        const choice = await ctx.ui.select(
-          "Set a key for which provider?",
-          PROVIDERS.map((p) => `${p.id} — ${p.label}`),
-        );
-        if (!choice) return;
-        const provider = getProvider(choice.split(" ")[0]);
-        if (!provider) return;
-        await promptForKey(provider);
-        return;
-      }
-
-      // /search-key <provider> — status / prompt for that provider
-      const named = getProvider(parts[0]);
-      if (named && parts.length === 1) {
-        ctx.ui.notify(statusLine(named), "info");
-        await promptForKey(named);
-        return;
-      }
-
-      // /search-key <provider> <key|clear>
-      if (named && parts.length >= 2) {
-        const value = parts.slice(1).join(" ");
-        if (value === "clear" || value === "remove") {
-          await clearKey(named);
-          return;
-        }
-        await saveKey(named, value, ctx);
-        return;
-      }
-
-      // /search-key <key|clear> — applies to the default provider
-      const provider = providerFor(undefined, config).provider;
-      if (parts.length === 1 && (parts[0] === "clear" || parts[0] === "remove")) {
-        await clearKey(provider);
-        return;
-      }
-      if (parts.length === 1) {
-        if (provider.looksLikeKey(parts[0])) {
-          await saveKey(provider, parts[0], ctx);
-          return;
-        }
-        ctx.ui.notify(
-          `Unknown provider "${parts[0]}". Available providers: ${PROVIDER_IDS.join(", ")}.`,
-          "error",
-        );
-        return;
-      }
-
-      ctx.ui.notify(
-        "Usage: /search-key [provider] [key|clear]",
-        "warning",
-      );
-    },
-  });
-
-  // ── Command: /search-provider ───────────────────────────────────────────
-  pi.registerCommand("search-provider", {
-    description: "Show or set the default search backend",
-    async handler(args, ctx) {
-      const input = args.trim();
-      const config = loadConfig();
-      const current = defaultProviderId(config);
-
-      if (!input) {
-        const lines = PROVIDERS.map((provider) => {
-          const resolved = keyFor(provider, config);
-          const mark = provider.id === current ? "→" : " ";
-          const state = resolved
-            ? `key via ${keySourceLabel(provider, resolved)}`
-            : "no key configured";
-          return `${mark} ${provider.id} — ${provider.label} (${state})`;
-        });
-        ctx.ui.notify(
-          `${lines.join("\n")}\n\nUsage: /search-provider <id> to change the default (or /search-config for the menu).`,
-          "info",
-        );
-        return;
-      }
-
-      const provider = getProvider(input);
-      if (!provider) {
-        ctx.ui.notify(
-          `Unknown provider "${input}". Available providers: ${PROVIDER_IDS.join(", ")}.`,
-          "error",
-        );
-        return;
-      }
-
-      await saveDefaultProvider(provider.id);
-      const resolved = keyFor(provider, config);
-      ctx.ui.notify(
-        `Default search backend: ${provider.id}` +
-          (resolved
-            ? ""
-            : ` — warning: ${provider.label} has no API key yet (run /search-key ${provider.id} <key>).`),
-        resolved ? "info" : "warning",
-      );
-    },
-  });
-
   // ── Command: /search-test ───────────────────────────────────────────────
   pi.registerCommand("search-test", {
     description: "Self-check every backend, optionally with one live call each",
@@ -712,7 +538,7 @@ export default function (pi: ExtensionAPI) {
 
         if (!resolved) {
           ctx.ui.notify(
-            `• ${provider.id}${isDefault}: not configured (optional) — /search-key ${provider.id} <key> or ${provider.apiKeyEnv[0]}`,
+            `• ${provider.id}${isDefault}: not configured (optional) — /search-config, or ${provider.apiKeyEnv[0]}`,
             "info",
           );
           continue;
