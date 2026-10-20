@@ -68,15 +68,14 @@ echo "  Extension: $EXT_PATH"
 echo "  Current:   v$OLD_VERSION"
 
 # ── Bump version ─────────────────────────────────────────────────────────────
+#
+# `bump-version.js` owns what a bump means for this repo: the extension package
+# always, the repo-root package (and its lockfile) when it is the same package.
+# Keeping it in one place is what stops the root metadata from drifting behind
+# the tag again.
 
 if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   NEW_VERSION="$BUMP"
-  node -e "
-    const fs = require('fs');
-    const pkg = JSON.parse(fs.readFileSync('$EXT_PKG', 'utf-8'));
-    pkg.version = '$NEW_VERSION';
-    fs.writeFileSync('$EXT_PKG', JSON.stringify(pkg, null, 2) + '\n');
-  "
 else
   case "$BUMP" in
     major|minor|patch)
@@ -88,12 +87,6 @@ else
         if (bump === 'patch') { v[2]++; }
         process.stdout.write(v.join('.'));
       ")"
-      node -e "
-        const fs = require('fs');
-        const pkg = JSON.parse(fs.readFileSync('$EXT_PKG', 'utf-8'));
-        pkg.version = '$NEW_VERSION';
-        fs.writeFileSync('$EXT_PKG', JSON.stringify(pkg, null, 2) + '\n');
-      "
       ;;
     *)
       echo "✗ Invalid bump value: $BUMP (use major, minor, patch, or x.y.z)"
@@ -101,6 +94,18 @@ else
       ;;
   esac
 fi
+
+# Captured into a variable (not a process substitution) so a failing helper
+# aborts the release instead of silently skipping the bump.
+BUMPED_OUTPUT="$(node "$REPO_ROOT/scripts/bump-version.js" "$EXT_PATH" "$NEW_VERSION")"
+
+BUMPED_FILES=()
+while IFS= read -r bumped; do
+  if [ -n "$bumped" ]; then
+    BUMPED_FILES+=("$bumped")
+    echo "  Bumped:    ${bumped#$REPO_ROOT/}"
+  fi
+done <<< "$BUMPED_OUTPUT"
 
 echo "  New:       v$NEW_VERSION"
 
@@ -121,6 +126,9 @@ TAG="${EXT_NAME}@${NEW_VERSION}"
 echo ""
 echo "→ Committing..."
 git add "$EXT_DIR" "$REPO_ROOT/README.md"
+if [ ${#BUMPED_FILES[@]} -gt 0 ]; then
+  git add "${BUMPED_FILES[@]}"
+fi
 git commit -m "release: ${TAG}"
 
 # ── Tag ──────────────────────────────────────────────────────────────────────
