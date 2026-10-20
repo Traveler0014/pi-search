@@ -7,6 +7,7 @@
  *
  * Commands (user-facing, kebab-case):
  *   - /search <query>            Quick raw search, results in a notification
+ *   - /search-config             Interactive settings menu (keys, default backend)
  *   - /search-key [id] [key]     Set / show / clear a provider's API key
  *   - /search-provider [id]      Show or set the default backend
  *   - /search-test [live]        Self-check per backend (live = one real call)
@@ -21,6 +22,7 @@
  * Layout:
  *   core/       provider-agnostic types, transport, config, scoring, formatting
  *   providers/  one adapter per backend + the registry
+ *   ui/         the interactive settings menu
  *   index.ts     registration glue only (tools, commands, TUI)
  *
  * Testing:
@@ -28,10 +30,7 @@
  *   pi -e ./tools/pi-search/index.ts
  */
 
-import {
-  withFileMutationQueue,
-  type ExtensionAPI,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
@@ -40,14 +39,18 @@ import {
   loadConfig,
   maskApiKey,
   resolveApiKey,
-  saveConfig,
-  withApiKey,
-  withDefaultProvider,
   type ResolvedApiKey,
   type SearchConfig,
 } from "./core/config.js";
 import { formatExtractResponse, formatSearchResponse } from "./core/format.js";
 import { describeNativeOptions } from "./core/provider-options.js";
+import {
+  envOverrideNote,
+  keyFormatError,
+  removeProviderKey,
+  saveDefaultProvider,
+  saveProviderKey,
+} from "./core/settings.js";
 import {
   DEFAULT_DETAIL,
   DEFAULT_MAX_RESULTS,
@@ -67,6 +70,11 @@ import {
   selectProvider,
 } from "./providers/registry.js";
 import type { SearchProvider } from "./providers/types.js";
+import {
+  buildSettingsMenu,
+  runMenu,
+  settingsSummary,
+} from "./ui/config-menu.js";
 
 // =============================================================================
 // Helpers
@@ -138,16 +146,6 @@ function errorMessage(error: unknown): string {
   if (error instanceof ProviderError) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
-
-/** Serialized read-modify-write so concurrent writers cannot drop a key. */
-async function persistConfig(
-  mutate: (config: SearchConfig) => SearchConfig,
-): Promise<void> {
-  await withFileMutationQueue(CONFIG_FILE, async () => {
-    saveConfig(mutate(loadConfig()));
-  });
-}
-
 const PROVIDER_PARAM_DESCRIPTION =
   "Search backend to use. Omit to use the configured default provider";
 
@@ -490,6 +488,44 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // ── Command: /search-config ─────────────────────────────────────────────
+  //
+  // The interactive front door for every setting. `/search-key` and
+  // `/search-provider` stay as scriptable one-liners; the menu is the place a
+  // human manages state, and it grows by adding an entry in
+  // `ui/config-menu.ts` rather than by adding another command.
+  pi.registerCommand("search-config", {
+    description: "Open the settings menu (provider keys, default backend)",
+    async handler(_args, ctx) {
+      if (!ctx.hasUI) {
+        // No dialogs available (RPC/CI): print the same state the menu shows.
+        ctx.ui.notify(
+          settingsSummary(loadConfig(), PROVIDERS, CONFIG_FILE),
+          "info",
+        );
+        return;
+      }
+
+      await runMenu(
+        buildSettingsMenu({
+          providers: PROVIDERS,
+          config: loadConfig,
+          configPath: CONFIG_FILE,
+          saveKey: async (provider, key) => {
+            await saveProviderKey(provider.id, key);
+          },
+          clearKey: async (provider) => {
+            await removeProviderKey(provider.id);
+          },
+          setDefault: async (provider) => {
+            await saveDefaultProvider(provider?.id);
+          },
+        }),
+        ctx.ui,
+      );
+    },
+  });
+
   // ── Command: /search-key ────────────────────────────────────────────────
   pi.registerCommand("search-key", {
     description: "Set, show, or clear a provider's search API key",
@@ -530,26 +566,20 @@ export default function (pi: ExtensionAPI) {
         value: string,
         ui: typeof ctx,
       ): Promise<void> => {
-        if (!provider.looksLikeKey(value)) {
-          ui.ui.notify(
-            `Invalid key format: expected a ${provider.label} API key.`,
-            "error",
-          );
+        const error = keyFormatError(provider, value);
+        if (error) {
+          ui.ui.notify(error, "error");
           return;
         }
-        await persistConfig((current) => withApiKey(current, provider.id, value));
-        const envOverride = process.env[provider.apiKeyEnv[0]]?.trim();
-        const suffix = envOverride
-          ? ` Note: ${provider.apiKeyEnv[0]} is set and takes precedence over the stored key.`
-          : "";
+        await saveProviderKey(provider.id, value.trim());
         ui.ui.notify(
-          `Saved ${provider.label} API key to ${CONFIG_FILE}.${suffix}`,
+          `Saved ${provider.label} API key to ${CONFIG_FILE}.${envOverrideNote(provider)}`,
           "info",
         );
       };
 
       const clearKey = async (provider: SearchProvider): Promise<void> => {
-        await persistConfig((current) => withApiKey(current, provider.id, ""));
+        await removeProviderKey(provider.id);
         ctx.ui.notify(
           `Removed the stored ${provider.label} API key (${CONFIG_FILE}).`,
           "info",
@@ -560,7 +590,8 @@ export default function (pi: ExtensionAPI) {
       if (parts.length === 0) {
         const lines = [PROVIDERS.map(statusLine).join("\n")];
         lines.push(
-          "Usage: /search-key <provider> <key|clear> — or /search-key <key> for the default provider.",
+          "Usage: /search-key <provider> <key|clear> — or /search-key <key> for the default provider.\n" +
+            "Tip: /search-config opens the interactive settings menu.",
         );
         ctx.ui.notify(lines.join("\n\n"), "info");
 
@@ -638,7 +669,7 @@ export default function (pi: ExtensionAPI) {
           return `${mark} ${provider.id} — ${provider.label} (${state})`;
         });
         ctx.ui.notify(
-          `${lines.join("\n")}\n\nUsage: /search-provider <id> to change the default.`,
+          `${lines.join("\n")}\n\nUsage: /search-provider <id> to change the default (or /search-config for the menu).`,
           "info",
         );
         return;
@@ -653,10 +684,10 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      await persistConfig((value) => withDefaultProvider(value, provider.id));
+      await saveDefaultProvider(provider.id);
       const resolved = keyFor(provider, config);
       ctx.ui.notify(
-        `Default search provider: ${provider.id}` +
+        `Default search backend: ${provider.id}` +
           (resolved
             ? ""
             : ` — warning: ${provider.label} has no API key yet (run /search-key ${provider.id} <key>).`),

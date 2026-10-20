@@ -10,7 +10,7 @@ Give the agent live access to the web: it can search for current information and
 - **`search_extract`** — full readable page text from up to 20 URLs per call, including failed-URL reporting
 - **Capability-shaped schema** — the model-facing parameters describe *searching*, not any one backend; backend-native knobs travel in `provider_options`
 - **Pluggable backends** — Tavily and DeepSeek today; every backend is an adapter behind one registry, and the tool schemas do not change when one is added
-- **Per-provider keys and default** — `/search-key <provider> <key>`, `/search-provider <id>`; `<PROVIDER>_API_KEY` always wins over the stored key
+- **Per-provider keys and default** — `/search-config` opens a settings menu; `/search-key <provider> <key>` and `/search-provider <id>` remain for scripts; `<PROVIDER>_API_KEY` always wins over the stored key
 - **Compact plain-text output** tuned for model consumption, with automatic truncation
 - **Judgement aids per result** — a normalized `score` with a `high`/`medium`/`low` level, the publication date, and provider flags, compressed onto one line so the model can weigh results instead of trusting rank alone
 - **Key management** — `/search-key` stores the key in `~/.pi/agent/pi-search.json` with `0600` permissions; `TAVILY_API_KEY` overrides it
@@ -78,11 +78,30 @@ DeepSeek limits the query to **128 characters**, and the filters are part of it 
 
 ## Commands (user-facing, kebab-case)
 
+### `/search-config`
+
+Opens the settings menu — the interactive way to manage every option:
+
+```
+┌ pi-search settings
+│   Tavily — no key
+│   DeepSeek — key sk-abcde…mnop via stored key · default
+│   Default search backend — automatic (DeepSeek)
+│   Show current configuration
+│   ✕ Close
+```
+
+A backend row opens `Set or replace API key`, `Clear stored API key` (confirmation required), and `Make <provider> the default`. The `Default search backend` row pins a backend or restores automatic selection (first backend that has a key). Keys are shown masked, with their source (`via stored key` / `via env DEEPSEEK_API_KEY`).
+
+Rows are redrawn with live state after every action; `← Back` returns to the root and `Esc` closes. Every setting lives in one menu tree, so a new option is a new entry in `tools/pi-search/ui/config-menu.ts` — not a new command. Without a dialog UI (RPC/CI) the same state is printed as text.
+
 ### `/search <query>`
 
 Runs a quick 5-result basic search and shows titles and URLs in a notification. This is a raw lookup — ask the agent to "search for ..." when you want a synthesized answer.
 
 ### `/search-key [provider] [key|clear]`
+
+Scriptable key management (the menu's non-interactive equivalent):
 
 - `/search-key` — show every backend with its key status and source, then (interactively) pick one to set
 - `/search-key deepseek sk-...` — validate and save that backend's key
@@ -118,6 +137,12 @@ The environment always takes precedence over the stored key.
 ### Option B — store keys with pi
 
 ```
+/search-config
+```
+
+or the scriptable equivalents:
+
+```
 /search-key tavily tvly-...
 /search-key deepseek sk-...
 /search-provider deepseek
@@ -148,6 +173,8 @@ Get a Tavily key at [tavily.com](https://tavily.com) (free tier available); a De
 ```
 
 A v1 file (`{ "apiKey": "..." }`) is migrated on read to `providers.tavily` — v1 only ever held a Tavily key.
+
+When `defaultProvider` names a backend without a key, calls fall back to the first backend that has one and add a `note:` warning instead of failing; run `/search-config` to see which backend is actually in use (`→`).
 
 ## Usage examples
 

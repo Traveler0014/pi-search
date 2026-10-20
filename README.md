@@ -9,7 +9,7 @@ Web search and page extraction for the pi coding agent, with pluggable search ba
 
 | Extension | Providers | Commands | Tools |
 |-----------|-----------|----------|-------|
-| [tools/pi-search](./tools/pi-search) | — | `/search`, `/search-key`, `/search-provider`, `/search-test` | `search_web`, `search_extract` |
+| [tools/pi-search](./tools/pi-search) | — | `/search`, `/search-config`, `/search-key`, `/search-provider`, `/search-test` | `search_web`, `search_extract` |
 
 ### [tools/pi-search](./tools/pi-search)
 
@@ -18,6 +18,7 @@ Web search and page extraction for the pi coding agent, powered by pluggable sea
 **Commands:**
 
 - `/search` — Quick web search — /search <query>
+- `/search-config` — Open the settings menu (provider keys, default backend)
 - `/search-key` — Set, show, or clear a provider's search API key
 - `/search-provider` — Show or set the default search backend
 - `/search-test` — Self-check every backend, optionally with one live call each

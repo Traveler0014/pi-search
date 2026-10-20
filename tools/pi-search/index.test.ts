@@ -34,16 +34,29 @@ interface AnyTool {
   ) => { render: (w: number) => string[] };
 }
 
-function capture(): Map<string, AnyTool> {
-  const tools = new Map<string, AnyTool>();
-  register({
-    registerTool: (definition: AnyTool) => tools.set(definition.name, definition),
-    registerCommand: () => {},
-  } as any);
-  return tools;
+interface AnyCommand {
+  description: string;
+  handler: (
+    args: string,
+    ctx: { hasUI: boolean; ui: { notify: (m: string, t?: string) => void } },
+  ) => Promise<void>;
 }
 
-const tools = capture();
+function capture(): {
+  tools: Map<string, AnyTool>;
+  commands: Map<string, AnyCommand>;
+} {
+  const tools = new Map<string, AnyTool>();
+  const commands = new Map<string, AnyCommand>();
+  register({
+    registerTool: (definition: AnyTool) => tools.set(definition.name, definition),
+    registerCommand: (name: string, definition: AnyCommand) =>
+      commands.set(name, definition),
+  } as any);
+  return { tools, commands };
+}
+
+const { tools, commands } = capture();
 
 function line(component: { render: (w: number) => string[] }): string {
   return component.render(200).join("\n").trim();
@@ -52,6 +65,31 @@ function line(component: { render: (w: number) => string[] }): string {
 function toolResult(content: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text", text: content }], details };
 }
+
+describe("registration", () => {
+  it("registers the settings menu alongside the scriptable commands", () => {
+    expect([...commands.keys()].sort()).toEqual([
+      "search",
+      "search-config",
+      "search-key",
+      "search-provider",
+      "search-test",
+    ]);
+  });
+
+  it("prints the configuration summary when no dialog UI is available", async () => {
+    const notes: { message: string; type?: string }[] = [];
+
+    await commands.get("search-config")!.handler("", {
+      hasUI: false,
+      ui: { notify: (message, type) => notes.push({ message, type }) },
+    });
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.message).toContain("pi-search config —");
+    expect(notes[0]!.message).toContain("default:");
+  });
+});
 
 describe("search_web renderers", () => {
   const tool = tools.get("search_web")!;
