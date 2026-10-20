@@ -62,9 +62,9 @@ import {
   PROVIDER_IDS,
   PROVIDERS,
   getProvider,
-  resolveProvider,
   runExtract,
   runSearch,
+  selectProvider,
 } from "./providers/registry.js";
 import type { SearchProvider } from "./providers/types.js";
 
@@ -81,18 +81,36 @@ function textResult(text: string, details?: Record<string, unknown>) {
 
 /** The provider a call resolves to: explicit id, else the configured default. */
 function providerFor(id: string | undefined, config: SearchConfig) {
-  const wanted = id ?? config.defaultProvider;
-  // A stale `defaultProvider` (provider removed or renamed) must not break every
-  // call: fall back to the first registered backend and let `details.provider`
-  // show which one actually served the request.
-  if (wanted && !getProvider(wanted)) return resolveProvider();
-  return resolveProvider(wanted);
+  return selectProvider(id, config);
 }
 
+/** The provider an unqualified call actually uses (see `selectProvider`). */
 function defaultProviderId(config: SearchConfig): string {
-  const wanted = config.defaultProvider;
-  if (wanted && getProvider(wanted)) return wanted;
-  return PROVIDERS[0].id;
+  return providerFor(undefined, config).provider.id;
+}
+
+/**
+ * First non-empty line of a tool result.
+ *
+ * Error results carry only `content` (their `details` are `{}`), so the TUI has
+ * to show the message itself instead of inventing a summary from the details.
+ */
+function firstLine(content: readonly { type: string; text?: string }[]): string {
+  for (const block of content) {
+    if (block.type !== "text" || typeof block.text !== "string") continue;
+    const line = block.text
+      .split("\n")
+      .map((candidate) => candidate.trim())
+      .find(Boolean);
+    if (line) return line.length > 140 ? `${line.slice(0, 137)}…` : line;
+  }
+  return "";
+}
+
+/** Merge the "not the configured default" explanation into a response. */
+function withNote<T extends { warnings?: string[] }>(response: T, note?: string): T {
+  if (!note) return response;
+  return { ...response, warnings: [...(response.warnings ?? []), note] };
 }
 
 function keyFor(
@@ -216,7 +234,7 @@ export default function (pi: ExtensionAPI) {
 
     async execute(_toolCallId, params, signal) {
       const config = loadConfig();
-      const { provider } = providerFor(params.provider, config);
+      const { provider, note } = providerFor(params.provider, config);
       const apiKey = requireApiKey(provider, config);
 
       const options: SearchOptions = {
@@ -232,7 +250,10 @@ export default function (pi: ExtensionAPI) {
         options: params.provider_options as Record<string, unknown> | undefined,
       };
 
-      const response = await runSearch(provider, apiKey, options, { signal });
+      const response = withNote(
+        await runSearch(provider, apiKey, options, { signal }),
+        note,
+      );
 
       return textResult(formatSearchResponse(response), {
         provider: provider.id,
@@ -265,13 +286,15 @@ export default function (pi: ExtensionAPI) {
         args.provider ?? null,
         args.detail && args.detail !== DEFAULT_DETAIL ? args.detail : null,
         args.recency ?? null,
-        `${args.max_results ?? DEFAULT_MAX_RESULTS} results`,
+        // `max N` is the requested cap, not the number of results — a bare
+        // "N results" made an empty answer look like a ten-hit answer.
+        `max ${args.max_results ?? DEFAULT_MAX_RESULTS}`,
       ].filter(Boolean);
       text += " " + theme.fg("dim", `(${meta.join(", ")})`);
       return new Text(text, 0, 0);
     },
 
-    renderResult(result, _options, theme) {
+    renderResult(result, _options, theme, context) {
       const details = result.details as
         | {
             provider?: string;
@@ -280,6 +303,18 @@ export default function (pi: ExtensionAPI) {
             warnings?: string[];
           }
         | undefined;
+
+      // A thrown failure (missing key, HTTP error) has empty `details`, which
+      // used to fall through to "No results" — the search never ran, so show
+      // what actually went wrong.
+      if (context.isError) {
+        return new Text(
+          theme.fg("error", firstLine(result.content) || "Search failed"),
+          0,
+          0,
+        );
+      }
+
       const count = details?.count ?? 0;
       const warnings = details?.warnings?.length ?? 0;
 
@@ -334,7 +369,7 @@ export default function (pi: ExtensionAPI) {
 
     async execute(_toolCallId, params, signal) {
       const config = loadConfig();
-      const { provider } = providerFor(params.provider, config);
+      const { provider, note } = providerFor(params.provider, config);
       const apiKey = requireApiKey(provider, config);
 
       const options: ExtractOptions = {
@@ -342,7 +377,10 @@ export default function (pi: ExtensionAPI) {
         options: params.provider_options as Record<string, unknown> | undefined,
       };
 
-      const response = await runExtract(provider, apiKey, options, { signal });
+      const response = withNote(
+        await runExtract(provider, apiKey, options, { signal }),
+        note,
+      );
 
       return textResult(formatExtractResponse(response), {
         provider: provider.id,
@@ -372,10 +410,22 @@ export default function (pi: ExtensionAPI) {
       return new Text(text, 0, 0);
     },
 
-    renderResult(result, _options, theme) {
+    renderResult(result, _options, theme, context) {
       const details = result.details as
         | { count?: number; failedCount?: number; provider?: string }
         | undefined;
+
+      // Same trap as search_web: an error result carries no `details`, so
+      // without this branch a failed call rendered as a success-coloured
+      // "0 pages".
+      if (context.isError) {
+        return new Text(
+          theme.fg("error", firstLine(result.content) || "Extraction failed"),
+          0,
+          0,
+        );
+      }
+
       const count = details?.count ?? 0;
       const failed = details?.failedCount ?? 0;
 

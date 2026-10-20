@@ -10,6 +10,7 @@
  * lives in exactly one place.
  */
 
+import { resolveApiKey, type SearchConfig } from "../core/config.js";
 import { finalizeSearchResponse } from "../core/score.js";
 import { countDuplicates, dedupeResults } from "../core/results.js";
 import type {
@@ -64,6 +65,56 @@ export function resolveProvider(id?: string): ResolvedProvider {
     );
   }
   return { provider, explicit: true };
+}
+
+export interface ProviderSelection {
+  provider: SearchProvider;
+  /** True when the caller named it explicitly rather than inheriting the default. */
+  explicit: boolean;
+  /**
+   * Set when the call is *not* using the configured default, with the reason.
+   * Surfaced as a warning so a misconfigured default is discoverable instead of
+   * silently changing which backend answers every call.
+   */
+  note?: string;
+}
+
+/**
+ * Choose the backend for a call.
+ *
+ * An explicit `provider` always wins: when its key is missing the caller gets
+ * the actionable "not configured" error instead of a silent switch to another
+ * backend. Otherwise the configured default is honored **only when it has a
+ * key** — a stale default (renamed backend, never-set or removed key) would
+ * otherwise fail every call. When no backend has a key at all the default is
+ * kept, so the error names the backend the user meant to configure.
+ */
+export function selectProvider(
+  id: string | undefined,
+  config: SearchConfig,
+): ProviderSelection {
+  const wanted = id ?? config.defaultProvider;
+  // Unknown ids fall back instead of throwing: a config naming a removed
+  // backend must not break every call.
+  const preferred = wanted ? getProvider(wanted) : undefined;
+
+  if (id && preferred) return { provider: preferred, explicit: true };
+  if (preferred && resolveApiKey(preferred, config)) {
+    return { provider: preferred, explicit: false };
+  }
+
+  const configured = PROVIDERS.find((p) => resolveApiKey(p, config) !== null);
+  if (configured) {
+    const note =
+      wanted && wanted !== configured.id
+        ? preferred
+          ? `default provider ${preferred.label} has no API key; using ${configured.label} — run /search-provider ${configured.id} to make it the default`
+          : `default provider "${wanted}" is not a known backend; using ${configured.label} — run /search-provider ${configured.id} to make it the default`
+        : undefined;
+    return { provider: configured, explicit: false, ...(note ? { note } : {}) };
+  }
+
+  return { provider: preferred ?? PROVIDERS[0], explicit: false };
 }
 
 /**
